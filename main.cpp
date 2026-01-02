@@ -3,13 +3,21 @@
 #include <print>
 
 int main() {
-    std::string text = "plaintext";
+    std::string text = "12345678901234567890123456789012345678901234567890";
+    
     Cryptoxx::secure_vector<uint8_t> plain(text.begin(), text.end());
     
     for (uint8_t x: plain) {
-        std::println("data: {}", static_cast<char>(x));
+        std::println("data: {}, size {}", static_cast<char>(x), sizeof(x));
     }
-            
+    std::println("Size: {}, Capacity: {}, Empty: {}", plain.size(), plain.capacity(), plain.empty());
+    
+    plain.reserve(20);
+    for (uint8_t x: plain) {
+        std::println("data: {}, size {}", static_cast<char>(x), sizeof(x));
+    }
+    std::println("Size: {}, Capacity: {}, Empty: {}", plain.size(), plain.capacity(), plain.empty());
+    
     // std::unique_ptr<Cipher> cipher1 = Cryptoxx::Aes::create("CTR(AES-256)");
     
     // Cryptoxx::RandomSeed rng;
