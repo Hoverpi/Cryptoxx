@@ -125,7 +125,11 @@ private:
         (void)madvise(mem, bytes, MADV_DONTDUMP);
         explicit_bzero(mem, bytes);
         
-        mprotect(mem, bytes, PROT_NONE);
+        if (mprotect(mem, bytes, PROT_NONE) != 0) {
+            munlock(mem, bytes);
+            munmap(mem, bytes);
+            throw std::runtime_error("mprotect(PROT_NONE) failed");
+        }
         
         _data = std::unique_ptr<T[], FreeMmap<T>>(mem, FreeMmap<T>{bytes});
         
