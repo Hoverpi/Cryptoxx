@@ -2,15 +2,12 @@
 #ifndef CRYPTOXX_HPP_
 #define CRYPTOXX_HPP_
 
-#include <vector>
-#include <iterator>
-#include <cstdlib>
-#include <concepts>
+#define __STDC_WANT_LIB_EXT1__ 1
+
 #include <memory>
-#include <cstdint>
-#include <cstring>
 #include <print>
-#include <iostream>
+#include <cstring>
+#include <sys/mman.h>
 
 namespace Cryptoxx {
 
@@ -24,100 +21,178 @@ namespace Cryptoxx {
 
 template <typename T>
 struct FreeMmap {
-    std::size_t size;
+    std::size_t bytes;
     void operator()(T* ptr) const {
+        if (!ptr) return; 
         auto p = reinterpret_cast<uint8_t*>(ptr);
-        if (ptr) {
-            std::memset(p, 0, size);
-            std::free(p);
-        }
-    std::println("Clean memory: vector pointer begin:{} - end:{} with size {}", static_cast<void*>(p), static_cast<void*>(p + size), size);
+        
+        (void)mprotect(p, bytes, PROT_READ | PROT_WRITE);
+        explicit_bzero(p, bytes);
+        (void)munlock(p, bytes);
+        (void)munmap(p, bytes);
+        
+        std::println("Clean memory: vector pointer begin: {} - end: {} with size {}", static_cast<void*>(p), static_cast<void*>(p + bytes), bytes);
     }
 };
-
-// template <typename T>
-//     concept resizable_byte_buffer = std::default_initializable<T> && requires(T t, size_t n) {
-//         { t.resize(n) };
-//         { t.data() } -> std::convertible_to<uint8_t*>;
-//         { t.size() } -> std::same_as<size_t>;
-//     };
-
-
 
 template <typename T>
 class secure_vector {
     
 static_assert(std::is_same<T, uint8_t>::value, "T need to bee uint8_t");
 
+    class read_guard {
+    private:
+        const T* ptr_;
+        std::size_t size_;
+        std::size_t bytes_;
+    
+    public:
+        read_guard(const T* p, std::size_t s, std::size_t b) : ptr_(p), size_(s), bytes_(b) {
+            if (mprotect(const_cast<T*>(ptr_), bytes_, PROT_READ) != 0) {
+                throw std::runtime_error("mprotect(PROT_READ) failed in read_guard");
+            }
+        }
+        
+        ~read_guard() {
+            (void)mprotect(const_cast<T*>(ptr_), bytes_, PROT_NONE);
+        }
+        
+        const T* begin() const noexcept { return ptr_; }
+        const T* end() const noexcept { return ptr_ + size_; }
+        std::size_t size() const noexcept { return size_; }
+        
+        read_guard(const read_guard&) = delete;
+        read_guard& operator=(const read_guard&) = delete;
+    };
+    
+    class write_guard {
+    private:
+        T* ptr_;
+        std::size_t size_;
+        std::size_t bytes_;
+    
+    public:
+        write_guard(T* p, std::size_t s, std::size_t b) : ptr_(p), size_(s), bytes_(b) {
+            if (mprotect(ptr_, bytes_, PROT_READ | PROT_WRITE) != 0) {
+                throw std::runtime_error("mprotect(PROT_READ|PROT_WRITE) failed in write_guard");
+            }
+        }
+
+        ~write_guard() {
+            (void)mprotect(ptr_, bytes_, PROT_NONE);
+        }
+        
+        T* data() noexcept { return ptr_; }
+        std::size_t size() const noexcept { return size_; }
+
+        write_guard(const write_guard&) = delete;
+        write_guard& operator=(const write_guard&) = delete;
+    };
+
 private:
-    std::size_t _size;
-    std::size_t _capacity;
+    std::size_t _size {0};
+    std::size_t _capacity {0};
     std::unique_ptr<T[], FreeMmap<T>> _data;
+    
+    static std::size_t round_page(std::size_t n) {
+        const std::size_t page = sysconf(_SC_PAGESIZE);
+        return (n + page - 1) & ~(page - 1);
+    }
+    
+    // helper memory managment functions
+    void allocate(std::size_t cap) {
+        if (cap == 0)
+            throw std::runtime_error("secure_vector: zero capacity not supported");
+        
+        const std::size_t bytes = round_page(cap * sizeof(T));
+        
+        T* mem = static_cast<T*>(mmap(nullptr,
+            bytes,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS, 
+            -1, 
+            0
+        ));
+        
+        if (mem == MAP_FAILED) 
+            throw std::runtime_error("mmap failed");
+        
+        if (mlock(mem, bytes) != 0) {
+            munmap(mem, bytes);
+            throw std::runtime_error("mlock failed");
+        }
+        
+        (void)madvise(mem, bytes, MADV_DONTDUMP);
+        explicit_bzero(mem, bytes);
+        
+        mprotect(mem, bytes, PROT_NONE);
+        
+        _data = std::unique_ptr<T[], FreeMmap<T>>(mem, FreeMmap<T>{bytes});
+        
+        _capacity = cap;
+    }
 
 public:
-    secure_vector(size_t n) : _size(n), _capacity(n), _data(std::unique_ptr<T[], FreeMmap<T>>(static_cast<T*>(std::aligned_alloc(64, n * sizeof(T))), FreeMmap<T>(n * sizeof(T)))) {
-        std::println("Reserved memory: begin: {} - end: {} with size {}", static_cast<void*>(_data.get()), static_cast<void*>(_data.get() + _size), _size);
+    explicit secure_vector(size_t n) : _size(n), _capacity(n) {
+        allocate(n);
+    
+        std::println(
+            "Reserved memory: begin: {} - end: {} with size {}",
+            static_cast<void*>(_data.get()),
+            static_cast<void*>(_data.get() + _size),
+            _size
+        );
     }
     
     template <typename Iter> 
-    secure_vector(Iter begin, Iter end): secure_vector(std::distance(begin, end)) {
-        std::copy(begin, end, _data.get());
-        std::println("distance: {}", std::distance(begin, end));
-    }
-    
-    size_t size() const noexcept { 
-        return _size; 
-    }
-    
-    size_t capacity() const noexcept {
-        return _capacity;
-    }
-    
-    bool empty() const noexcept {
-        return _size == 0;
-    }
-    
-    void reserve(std::size_t new_cap) noexcept {
-        if (new_cap <= _capacity) {
-            return;
-        }
+    explicit secure_vector(Iter begin, Iter end) : _size(0) {
+        const size_t n = std::distance(begin, end);
+        allocate(n);
+        assign(begin, end);
         
-        std::size_t growth_cap = _capacity == 0 ? 1 : _capacity;
-        while (growth_cap < new_cap) growth_cap <<= 1;
-        
-        constexpr std::size_t alignment = 64;
-        std::size_t bytes = growth_cap * sizeof(T);
-        bytes = (bytes + alignment - 1) & ~(alignment - 1);
-        
-        std::println("old_cap: {} new_cap: {}", _capacity, growth_cap);
-                
-        T* new_alloc = static_cast<T*>(std::aligned_alloc(64, growth_cap * sizeof(T)));
-        if (!new_alloc) return;
-        
-        std::memcpy(new_alloc, _data.get(), _size * sizeof(T));
-        
-        _data.reset(new_alloc);
-    
-        _capacity = growth_cap;
+        std::println(
+            "Reserved memory: begin: {} - end: {} with size {}",
+            static_cast<void*>(_data.get()),
+            static_cast<void*>(_data.get() + _size),
+            _size
+        );
     }
     
-    void shrink_to_fit() noexcept {
+    template <typename Iter>
+    void assign(Iter begin, Iter end) {
+        const size_t n = std::distance(begin, end);
+        if (n > _capacity) throw std::runtime_error("secure_vector overflow");
         
-    }
-    
-    
-    
-    T* data() {
-        return _data.get(); 
-    }
+        write_guard w(_data.get(), _capacity, _capacity * sizeof(T));
+        std::size_t i = 0;
+        for (auto it = begin; it != end; ++it, ++i)
+            w.data()[i] = static_cast<uint8_t>(*it);
 
-    T* begin() { 
-        return data(); 
-    }
-    T* end() { 
-        return data() + _size; 
+        _size = n;
     }
     
+    // Access control functions (scoped_read / scoped_write)
+    read_guard scoped_read() const {
+        return read_guard(
+            _data.get(),
+            _size,
+            _capacity * sizeof(T)
+        );
+    }
+    write_guard scoped_write() {
+        return write_guard(
+            _data.get(),
+            _capacity,
+            _capacity * sizeof(T)
+        );
+    }
+    
+    // Observers (size / capacity / empty)
+    size_t size() const noexcept { return _size; }
+    size_t capacity() const noexcept { return _capacity; }
+    bool empty() const noexcept { return _size == 0; }
+
+  
     secure_vector(const secure_vector&) = delete;
     secure_vector& operator=(const secure_vector&) = delete;
     
@@ -127,6 +202,6 @@ public:
     ~secure_vector() = default; // unique_ptr handle it
 };
 
-}
+} // namespace Cryptoxx
 
 #endif // #include CRYPTOXX_HPP_

@@ -1,22 +1,15 @@
 #include "cryptoxx.hpp"
 #include <string>
 #include <print>
+#include <ostream>
 
 int main() {
-    std::string text = "12345678901234567890123456789012345678901234567890";
+    std::string text = "12345678901234567890";
     
     Cryptoxx::secure_vector<uint8_t> plain(text.begin(), text.end());
     
-    for (uint8_t x: plain) {
-        std::println("data: {}, size {}", static_cast<char>(x), sizeof(x));
-    }
-    std::println("Size: {}, Capacity: {}, Empty: {}", plain.size(), plain.capacity(), plain.empty());
-    
-    plain.reserve(20);
-    for (uint8_t x: plain) {
-        std::println("data: {}, size {}", static_cast<char>(x), sizeof(x));
-    }
-    std::println("Size: {}, Capacity: {}, Empty: {}", plain.size(), plain.capacity(), plain.empty());
+    auto r = plain.scoped_read();
+    for (auto e: r) std::println("data: {}", static_cast<char>(e));
     
     // std::unique_ptr<Cipher> cipher1 = Cryptoxx::Aes::create("CTR(AES-256)");
     
