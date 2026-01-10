@@ -4,19 +4,16 @@
 #include <ostream>
 
 int main() {
-    std::string text = "12345678901234567890";
+    std::string_view text = "plaintext";
 
-    // Create a span of bytes from the string
-    std::span<const uint8_t> bytes{
-        reinterpret_cast<const uint8_t*>(text.data()),
-        text.size()
-    };
+    // Cryptoxx::secure_vector<uint8_t> plain(text.data(), text.data() + text.length());
+    Cryptoxx::secure_vector<uint8_t> plain(text);
 
-    Cryptoxx::secure_vector<uint8_t> plain(bytes);
-
-    auto r = plain.scoped_read();
-    for (uint8_t b : r) {
-        std::println("data: {}", static_cast<char>(b));
+    {
+        auto r = plain.scoped_read();
+        for (uint8_t b : r) {
+            std::println("data: {}", static_cast<char>(b));
+        }
     }
     
     // std::unique_ptr<Cipher> cipher1 = Cryptoxx::Aes::create("CTR(AES-256)");
