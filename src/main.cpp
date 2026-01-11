@@ -6,7 +6,6 @@
 int main() {
     std::string_view text = "plaintext";
 
-    // Cryptoxx::secure_vector<uint8_t> plain(text.data(), text.data() + text.length());
     Cryptoxx::secure_vector<uint8_t> plain(text);
 
     {
@@ -18,10 +17,10 @@ int main() {
     
     // std::unique_ptr<Cipher> cipher1 = Cryptoxx::Aes::create("CTR(AES-256)");
     
-    // Cryptoxx::RandomSeed rng;
+    Cryptoxx::Random rng;
     
-    // const auto key = rng.random_vector<std::vector<uint8_t>>(32);
-    // const auto iv = rng.random_vector<std::vector<uint8_t>>(16);
+    const Cryptoxx::secure_vector<uint8_t> key = rng.randomness<uint8_t>(32);
+    const Cryptoxx::secure_vector<uint8_t> iv = rng.randomness<uint8_t>(16);
     
     // // set key/vector
     // cipher->set_key(key);

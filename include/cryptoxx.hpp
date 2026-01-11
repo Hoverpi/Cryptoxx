@@ -9,6 +9,8 @@
 #include <sys/mman.h>
 
 namespace Cryptoxx {
+    
+class Random;
 
 // ============================================================
 // FreeMmap
@@ -70,6 +72,8 @@ private:
     std::size_t _size {0};
     std::size_t _capacity {0};
     std::unique_ptr<T[], FreeMmap<T>> _data;
+    
+    friend class Random;
 
 private:
     static std::size_t round_page(std::size_t n);

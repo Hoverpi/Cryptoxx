@@ -2,28 +2,49 @@
 #ifndef RANDOM_HPP_
 #define RANDOM_HPP_
 
-#include <concepts>
+#include "cryptoxx.hpp" 
+
+#include <print>
+#include <sys/random.h>
 
 namespace Cryptoxx {
 
-class RandomSeed {
+class Random {
 public:
-    template <typename T>
-    concept resizable_byte_buffer = std::default_initializable<T> && requires(T t, size_t n) {
-        { t.resize(n) };
-        { t.data() } -> std::convertible_to<uint8_t*>;
-        { t.size() } -> std::same_as<size_t>;
-    }
+    explicit Random() noexcept = default;
     
     template <typename T>
-    T random_vector(size_t bytes) {
-        T type;
-        type.resize(bytes);
-        randomize(type.begin(), type.end());
-        return type;
+    secure_vector<T> randomness(std::size_t bytes) const {
+        static_assert(std::is_same_v<T, uint8_t>, "secure_vector only supports uint8_t");
+    
+        if (bytes == 0)
+            return {};
+        
+        secure_vector<T> tmp(bytes);
+        
+        auto w = tmp.scoped_write_capacity();
+        
+        ssize_t random_numbers = getrandom(w.data(), bytes, GRND_NONBLOCK);
+        
+        if (random_numbers < 0) {
+            if (random_numbers == EAGAIN) {
+                throw std::runtime_error("Low quality randomness. Not enough entropy (EAGAIN)");
+            } else {
+                throw std::runtime_error("getrandom failed");
+            }
+        }
+        
+        if (static_cast<std::size_t>(random_numbers) != bytes) {
+            throw std::runtime_error("getrandom returned partial data");
+        }
+        
+        tmp._size = bytes;         
+        
+        return tmp;
     }
+    
 };
 
 }
 
-#endif // #ifndef RANDOM_HPP_
+#endif // RANDOM_HPP_
