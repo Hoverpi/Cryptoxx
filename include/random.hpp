@@ -2,17 +2,23 @@
 #ifndef RANDOM_HPP_
 #define RANDOM_HPP_
 
-#include "cryptoxx.hpp" 
+#include "secure_vector.hpp" 
 
 #include <print>
 #include <sys/random.h>
 
 namespace Cryptoxx {
 
+// ============================================================
+// Random
+// ============================================================
+
 class Random {
 public:
+    // ===================== constructor =====================
     explicit Random() noexcept = default;
     
+    // ===================== randomness =====================
     template <typename T>
     secure_vector<T> randomness(std::size_t bytes) const {
         static_assert(std::is_same_v<T, uint8_t>, "secure_vector only supports uint8_t");
@@ -43,6 +49,14 @@ public:
         return tmp;
     }
     
+    // ===================== rule of 5 =====================
+    Random(const Random&) = delete;
+    Random& operator=(const Random&) = delete;
+
+    Random(Random&&) noexcept = default;
+    Random& operator=(Random&&) noexcept = default;
+
+    ~Random() = default;
 };
 
 }

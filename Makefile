@@ -23,7 +23,7 @@ MAIN_BIN   := build/cryptoxx
 # Rules
 .PHONY: all clean
 
-all: $(MAIN_BIN)
+all: $(LIB_STATIC) $(LIB_SHARED) $(MAIN_BIN)
 
 # -- final executable --
 $(MAIN_BIN): $(LIB_STATIC) $(MAIN_OBJ)
