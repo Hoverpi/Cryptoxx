@@ -1,51 +1,55 @@
 CXX        := clang++
 AR         := ar
 CXXFLAGS   := -std=c++23 -Wall -Wextra -O2 -Iinclude
-LDFLAGS    :=
+LDFLAGS    := -fPIC
 
 # Paths
 SRC_DIR    := src
 OBJ_DIR    := build/obj
 LIB_DIR    := build/lib
 
-# Files
-LIB_NAME   := cryptoxx
+# Library name
+LIB_NAME   := $(shell basename $(CURDIR))
 LIB_STATIC := $(LIB_DIR)/lib$(LIB_NAME).a
 LIB_SHARED := $(LIB_DIR)/lib$(LIB_NAME).so
 
-LIB_SRC    := $(SRC_DIR)/cryptoxx.cpp
-LIB_OBJ    := $(OBJ_DIR)/cryptoxx.o
-
+# Main source
 MAIN_SRC   := $(SRC_DIR)/main.cpp
 MAIN_OBJ   := $(OBJ_DIR)/main.o
 MAIN_BIN   := build/cryptoxx
 
-# Rules
+# All library sources: all .cpp under src/ except MAIN_SRC
+LIB_SRC := $(filter-out $(MAIN_SRC),$(shell find $(SRC_DIR) -name '*.cpp' -print))
+# Corresponding object files in build/obj preserving subdirectories
+LIB_OBJ := $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(LIB_SRC))
+
 .PHONY: all clean
 
 all: $(LIB_STATIC) $(LIB_SHARED) $(MAIN_BIN)
 
-# -- final executable --
-$(MAIN_BIN): $(LIB_STATIC) $(MAIN_OBJ)
-	$(CXX) $(CXXFLAGS) $(MAIN_OBJ) -L$(LIB_DIR) -l$(LIB_NAME) -Wl,-rpath,'$$ORIGIN/lib' -o $@
+# final executable: link main with library
+$(MAIN_BIN): $(MAIN_OBJ) $(LIB_STATIC)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(MAIN_OBJ) -L$(LIB_DIR) -l$(LIB_NAME) -Wl,-rpath,'$$ORIGIN/lib' -o $@
 
-# ---- static library ----
+# static lib from all library objects
 $(LIB_STATIC): $(LIB_OBJ)
-	mkdir -p $(LIB_DIR)
+	@mkdir -p $(LIB_DIR)
 	$(AR) rcs $@ $^
-	
-# ---- shared library ----
+
+# shared lib from same objects
 $(LIB_SHARED): $(LIB_OBJ)
-	mkdir -p $(LIB_DIR)
+	@mkdir -p $(LIB_DIR)
 	$(CXX) -shared -fPIC $^ -o $@
 
-# ---- object files ----
+# Build object files, preserving directories under build/obj
+# $< is e.g. src/foo/bar.cpp and $@ becomes build/obj/foo/bar.o
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	mkdir -p $(OBJ_DIR)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -MMD -MP -c $< -o $@
 
--include $(OBJ_DIR)/*.d
+# include auto-generated deps
+-include $(LIB_OBJ:.o=.d) $(MAIN_OBJ:.o=.d)
 
-# ---- cleanup ----
 clean:
 	rm -rf build

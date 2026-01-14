@@ -15,18 +15,18 @@ int main() {
         }
     }
     
-    // std::unique_ptr<Cipher> cipher1 = Cryptoxx::Aes::create("CTR(AES-256)");
+    std::unique_ptr<Cryptoxx::Cipher> cipher = Cryptoxx::Aes::create("CTR(AES-256)");
     
     Cryptoxx::Random rng;
     
     const Cryptoxx::secure_vector<uint8_t> key = rng.randomness<uint8_t>(32);
     const Cryptoxx::secure_vector<uint8_t> iv = rng.randomness<uint8_t>(16);
     
-    // // set key/vector
-    // cipher->set_key(key);
-    // cipher->set_iv(iv);
+    // set key/vector
+    cipher->set_key(key);
+    cipher->set_iv(iv);
     
-    // std::vector<uint8_t> encrypted = cipher->encrypt(plain);
+    Cryptoxx::secure_vector<uint8_t> encrypted = cipher->encrypt(plain);
     
     // std::unique_ptr<Cipher> cipher2 = Cryptoxx::Aes::create("CTR(AES-256)");
     

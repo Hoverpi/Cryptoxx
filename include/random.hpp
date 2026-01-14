@@ -1,6 +1,6 @@
 #pragma once
-#ifndef RANDOM_HPP_
-#define RANDOM_HPP_
+#ifndef CRYPTOXX_RANDOM_HPP_
+#define CRYPTOXX_RANDOM_HPP_
 
 #include "secure_vector.hpp" 
 
@@ -61,4 +61,4 @@ public:
 
 }
 
-#endif // RANDOM_HPP_
+#endif // CRYPTOXX_RANDOM_HPP_

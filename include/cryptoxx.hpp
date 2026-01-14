@@ -4,6 +4,6 @@
 
 #include "random.hpp"
 #include "secure_vector.hpp"
-// #include "aes.hpp"
+#include "aes_decl/aes.hpp"
 
 #endif // CRYPTOXX_HPP_

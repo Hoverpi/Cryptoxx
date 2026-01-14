@@ -1,6 +1,6 @@
 #pragma once
-#ifndef SECURE_VECTOR_HPP_
-#define SECURE_VECTOR_HPP_
+#ifndef CRYPTOXX_SECURE_VECTOR_HPP_
+#define CRYPTOXX_SECURE_VECTOR_HPP_
 
 #include <vector>
 #include <memory>
@@ -49,7 +49,7 @@ private:
         std::size_t size() const noexcept { return _size; }
 
         ~read_guard() {
-            (void)mprotect(const_cast<T*>(_ptr), _bytes, PROT_NONE);
+            if (_ptr) (void)mprotect(const_cast<T*>(_ptr), _bytes, PROT_NONE);
         }
 
         read_guard(const read_guard&) = delete;
@@ -64,9 +64,9 @@ private:
                 throw std::runtime_error("mprotect(PROT_READ) failed");
         }
 
-        const T* _ptr;
-        std::size_t _size;
-        std::size_t _bytes;
+        const T* _ptr {nullptr};
+        std::size_t _size {0};
+        std::size_t _bytes {0};
     };
 
     // ===================== write_guard =====================
@@ -76,7 +76,7 @@ private:
         std::size_t size() const noexcept { return _size; }
 
         ~write_guard() {
-            (void)mprotect(_ptr, _bytes, PROT_NONE);
+            if (_ptr) (void)mprotect(_ptr, _bytes, PROT_NONE);
         }
 
         write_guard(const write_guard&) = delete;
@@ -91,19 +91,19 @@ private:
                 throw std::runtime_error("mprotect(PROT_RW) failed");
         }
 
-        T* _ptr;
-        std::size_t _size;
-        std::size_t _bytes;
+        T* _ptr {nullptr};
+        std::size_t _size {0};
+        std::size_t _bytes {0};
     };
 
 private:
+    std::size_t _bytes {0}; // exact mmap size    
     std::size_t _size {0};
     std::size_t _capacity {0};
     std::unique_ptr<T[], FreeMmap<T>> _data;
-
+    
     friend class Random;
 
-private:
     static std::size_t round_page(std::size_t n) {
         const std::size_t page =
             static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
@@ -114,9 +114,9 @@ private:
         if (capacity == 0)
             throw std::runtime_error("secure_vector: zero capacity");
 
-        const std::size_t bytes = round_page(capacity * sizeof(T));
+        _bytes = round_page(capacity * sizeof(T));
 
-        void* mem = mmap(nullptr, bytes,
+        void* mem = mmap(nullptr, _bytes,
                          PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS,
                          -1, 0);
@@ -124,17 +124,17 @@ private:
         if (mem == MAP_FAILED)
             throw std::runtime_error("mmap failed");
 
-        if (mlock(mem, bytes) != 0) {
-            munmap(mem, bytes);
+        if (mlock(mem, _bytes) != 0) {
+            munmap(mem, _bytes);
             throw std::runtime_error("mlock failed");
         }
 
-        explicit_bzero(mem, bytes);
-        (void)mprotect(mem, bytes, PROT_NONE);
+        explicit_bzero(mem, _bytes);
+        (void)mprotect(mem, _bytes, PROT_NONE);
 
         _data = std::unique_ptr<T[], FreeMmap<T>>(
             static_cast<T*>(mem),
-            FreeMmap<T>{bytes}
+            FreeMmap<T>{_bytes}
         );
 
         _capacity = capacity;
@@ -190,6 +190,14 @@ public:
         )) {}
 
     // ===================== append =====================
+    void append(const secure_vector<uint8_t>& sv) {
+        if (sv.empty())
+            return;
+    
+        auto r = sv.scoped_read();
+        append(std::span<const uint8_t>(r.begin(), r.size()));
+    }
+        
     void append(std::span<const uint8_t> input) {
         if (input.empty())
             return;
@@ -221,15 +229,18 @@ public:
 
     // ===================== scoped access =====================
     read_guard scoped_read() const {
-        return read_guard(_data.get(), _size, _capacity);
+        if (!_data) throw std::logic_error("secure_vector empty");
+        return read_guard(_data.get(), _size, _bytes);
     }
-
+    
     write_guard scoped_write() {
-        return write_guard(_data.get(), _size, _capacity);
+        if (!_data) throw std::logic_error("secure_vector empty");
+        return write_guard(_data.get(), _size, _bytes);
     }
-
+    
     write_guard scoped_write_capacity() {
-        return write_guard(_data.get(), _capacity, _capacity);
+        if (!_data) throw std::logic_error("secure_vector empty");
+        return write_guard(_data.get(), _capacity, _bytes);
     }
 
     // ===================== observers =====================
